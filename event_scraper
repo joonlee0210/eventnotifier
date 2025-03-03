@@ -1,0 +1,89 @@
+import os
+import requests
+from datetime import datetime
+
+TOKEN = "YOUROWNPRIVATEID"
+ORGANIZER_ID = "YOURORGANIZER"
+API_URL = f"https://www.eventbriteapi.com/v3/organizers/{ORGANIZER_ID}/events/?order_by=start_desc"
+
+# Ensure credentials are set
+if not TOKEN or not ORGANIZER_ID:
+    raise ValueError("Missing API token or organizer ID. Check your .env file.")
+
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
+def format_datetime(iso_date):
+    """Convert ISO 8601 date to a more readable format."""
+    dt = datetime.fromisoformat(iso_date)  # Convert to datetime object
+    return dt.strftime("%A, %B %d, %Y – %I:%M %p")  # Example: "Tuesday, May 6, 2025 – 6:00 PM"
+
+
+
+
+
+def get_ticket_availability(event_id):
+    """Fetch ticket availability for the given event and display sales window."""
+    ticket_url = f"https://www.eventbriteapi.com/v3/events/{event_id}/ticket_classes/"
+    response = requests.get(ticket_url, headers=HEADERS)
+
+    if response.status_code == 200:
+        tickets = response.json().get("ticket_classes", [])
+
+        # Check if at least one ticket is available
+        event_availability = "Available" if any(ticket.get("on_sale_status") == "AVAILABLE" for ticket in tickets) else "Sold Out"
+
+        return event_availability
+    else:
+        print("❌ Error fetching ticket info:", response.status_code, response.text)
+        return "Ticket info not available"
+
+
+
+
+
+def get_latest_event():
+    """Fetch and display details of the latest event posted by the organizer."""
+    response = requests.get(API_URL, headers=HEADERS)
+    
+    if response.status_code == 200:
+        events = response.json().get("events", [])
+        
+        if events:
+            latest_event = events[0]  # Most recent event
+            
+            event_name = latest_event["name"]["text"]
+            event_date = format_datetime(latest_event["start"]["local"])  # Format date
+            event_url = latest_event["url"]
+            event_description = latest_event["description"]["text"] or "No description available."
+            
+            # Fetch venue details if available
+            venue_id = latest_event.get("venue_id")
+            venue_details = "Venue information not available."
+            
+            if venue_id:
+                venue_response = requests.get(
+                    f"https://www.eventbriteapi.com/v3/venues/{venue_id}/",
+                    headers=HEADERS
+                )
+                if venue_response.status_code == 200:
+                    venue_data = venue_response.json()
+                    venue_details = f"{venue_data.get('name', 'Unknown Venue')}, {venue_data.get('address', {}).get('localized_address_display', 'Address not available')}"
+            
+            # Fetch ticket availability
+            available_seats = get_ticket_availability(latest_event["id"])
+            
+            # Print event details
+            print(f"🎟️ Latest Event: {event_name}")
+            print(f"📅 Date & Time: {event_date}")
+            print(f"📍 Location: {venue_details}")
+            print(f"📝 Description: {event_description[:300]}...")  # Limit description length
+            print(f"🎫 Availability: {available_seats}")
+            print(f"🔗 More Info: {event_url}")
+        
+        else:
+            print("No events found for this organizer.")
+    else:
+        print("Error fetching events:", response.status_code, response.text)
+
+# Run the function immediately
+get_latest_event()
